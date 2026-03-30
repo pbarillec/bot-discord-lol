@@ -3,6 +3,7 @@ import { setupInteractionHandler } from "./bot/handlers/interactionHandler";
 import { registerCommands } from "./bot/registerCommands";
 import { env } from "./config/env";
 import { initSchema } from "./db/schema";
+import { startPollMatchesJob } from "./jobs/pollMatchesJob";
 
 initSchema();
 
@@ -15,6 +16,7 @@ setupInteractionHandler(client);
 client.once("clientReady", async () => {
   try {
     await registerCommands();
+    startPollMatchesJob();
     console.log(`Logged in as ${client.user?.tag}`);
   } catch (error) {
     console.error("Failed to register slash commands:", error);
