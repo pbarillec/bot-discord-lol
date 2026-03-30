@@ -151,3 +151,20 @@ export function findUnpostedMatchSummariesByPlayer(playerId: number): PendingMat
 export function markMatchParticipantAsPosted(participantId: number): void {
   db.prepare("UPDATE match_participants SET posted_to_discord = 1 WHERE id = ?").run(participantId);
 }
+
+export function markOlderUnpostedMatchesAsPosted(playerId: number): void {
+  db.prepare(
+    `
+      UPDATE match_participants
+      SET posted_to_discord = 1
+      WHERE id IN (
+        SELECT mp.id
+        FROM match_participants mp
+        INNER JOIN matches m ON m.id = mp.match_id
+        WHERE mp.player_id = ? AND mp.posted_to_discord = 0
+        ORDER BY m.game_creation DESC, mp.id DESC
+        LIMIT -1 OFFSET 1
+      )
+    `,
+  ).run(playerId);
+}
