@@ -1,9 +1,11 @@
+import { Client } from "discord.js";
 import { findAllPlayers } from "../repositories/playerRepository";
 import { getNewMatchIdsForPlayer, processMatch } from "../services/matchService";
+import { postPendingMatchSummariesForPlayer } from "../services/summaryService";
 
 const POLL_INTERVAL_MS = 2 * 60 * 1000;
 
-export function startPollMatchesJob(): void {
+export function startPollMatchesJob(client: Client): void {
   let isRunning = false;
 
   const run = async () => {
@@ -37,6 +39,12 @@ export function startPollMatchesJob(): void {
                 error,
               );
             }
+          }
+
+          try {
+            await postPendingMatchSummariesForPlayer(client, player);
+          } catch (error) {
+            console.error(`[poll] Failed to post summaries for ${player.discord_username}:`, error);
           }
         } catch (error) {
           console.error(`[poll] Failed to check player ${player.discord_username}:`, error);
