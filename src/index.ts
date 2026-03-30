@@ -1,4 +1,6 @@
 import { Client, GatewayIntentBits } from "discord.js";
+import { setupInteractionHandler } from "./bot/handlers/interactionHandler";
+import { registerCommands } from "./bot/registerCommands";
 import { env } from "./config/env";
 import { openDatabase } from "./db/database";
 
@@ -15,8 +17,15 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user?.tag}`);
+setupInteractionHandler(client);
+
+client.once("ready", async () => {
+  try {
+    await registerCommands();
+    console.log(`Logged in as ${client.user?.tag}`);
+  } catch (error) {
+    console.error("Failed to register slash commands:", error);
+  }
 });
 
 client.login(env.token).catch((error) => {
