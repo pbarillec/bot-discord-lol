@@ -2,12 +2,11 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
-export function openDatabase(databasePath: string) {
-  const absolutePath = path.resolve(databasePath);
-  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+const dataDirectory = path.resolve("data");
+const databasePath = path.join(dataDirectory, "app.db");
 
-  const db = new Database(absolutePath);
-  db.pragma("journal_mode = WAL");
+fs.mkdirSync(dataDirectory, { recursive: true });
 
-  return db;
-}
+export const db = new Database(databasePath);
+
+db.pragma("journal_mode = WAL");
