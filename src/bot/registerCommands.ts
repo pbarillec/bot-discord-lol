@@ -2,7 +2,18 @@ import { REST, Routes, type RESTPostAPIApplicationGuildCommandsJSONBody } from "
 import { env } from "../config/env";
 
 const commandDefinitions: RESTPostAPIApplicationGuildCommandsJSONBody[] = [
-  { name: "register", description: "Register your summoner" },
+  {
+    name: "register",
+    description: "Register your summoner",
+    options: [
+      {
+        name: "riot_id",
+        description: "Riot ID in format name#tag",
+        type: 3,
+        required: true,
+      },
+    ],
+  },
   { name: "me", description: "Show your linked profile" },
   { name: "unregister", description: "Unregister your summoner" },
   { name: "profile", description: "Show a player profile" },
