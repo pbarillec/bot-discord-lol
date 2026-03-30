@@ -16,7 +16,7 @@ setupInteractionHandler(client);
 client.once("clientReady", async () => {
   try {
     await registerCommands();
-    startPollMatchesJob();
+    startPollMatchesJob(client);
     console.log(`Logged in as ${client.user?.tag}`);
   } catch (error) {
     console.error("Failed to register slash commands:", error);
