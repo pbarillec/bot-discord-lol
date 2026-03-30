@@ -1,5 +1,9 @@
 import { Client } from "discord.js";
 import { findAllPlayers } from "../repositories/playerRepository";
+import {
+  findRecentMatchIdsForPlayer,
+  markOlderUnpostedMatchesAsPosted,
+} from "../repositories/matchRepository";
 import { getNewMatchIdsForPlayer, processMatch } from "../services/matchService";
 import { postPendingMatchSummariesForPlayer } from "../services/summaryService";
 
@@ -23,6 +27,7 @@ export function startPollMatchesJob(client: Client): void {
 
       for (const player of players) {
         try {
+          const isFirstSync = findRecentMatchIdsForPlayer(player.id, 1).length === 0;
           const newMatchIds = await getNewMatchIdsForPlayer(player);
 
           if (newMatchIds.length > 0) {
@@ -39,6 +44,13 @@ export function startPollMatchesJob(client: Client): void {
                 error,
               );
             }
+          }
+
+          if (isFirstSync && newMatchIds.length > 1) {
+            markOlderUnpostedMatchesAsPosted(player.id);
+            console.log(
+              `[poll] First sync for ${player.discord_username}: suppressed older imported matches.`,
+            );
           }
 
           try {
