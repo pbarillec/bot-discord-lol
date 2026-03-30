@@ -3,6 +3,20 @@ import { Match, MatchParticipant } from "../types/match";
 
 type NewMatch = Omit<Match, "id" | "processed_at">;
 type NewMatchParticipant = Omit<MatchParticipant, "id" | "created_at">;
+export type PendingMatchSummary = {
+  participant_id: number;
+  match_id: string;
+  champion_name: string;
+  win: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  cs: number;
+  champ_level: number;
+  queue_id: number | null;
+  game_duration: number | null;
+  game_creation: number | null;
+};
 
 export function matchExists(matchId: string): boolean {
   const row = db.prepare("SELECT 1 FROM matches WHERE match_id = ? LIMIT 1").get(matchId) as
@@ -106,4 +120,34 @@ export function findRecentMatchIdsForPlayer(playerId: number, limit = 20): strin
     .all(playerId, limit) as Array<{ match_id: string }>;
 
   return rows.map((row) => row.match_id);
+}
+
+export function findUnpostedMatchSummariesByPlayer(playerId: number): PendingMatchSummary[] {
+  return db
+    .prepare(
+      `
+        SELECT
+          mp.id AS participant_id,
+          m.match_id,
+          mp.champion_name,
+          mp.win,
+          mp.kills,
+          mp.deaths,
+          mp.assists,
+          mp.cs,
+          mp.champ_level,
+          mp.queue_id,
+          m.game_duration,
+          m.game_creation
+        FROM match_participants mp
+        INNER JOIN matches m ON m.id = mp.match_id
+        WHERE mp.player_id = ? AND mp.posted_to_discord = 0
+        ORDER BY m.game_creation ASC
+      `,
+    )
+    .all(playerId) as PendingMatchSummary[];
+}
+
+export function markMatchParticipantAsPosted(participantId: number): void {
+  db.prepare("UPDATE match_participants SET posted_to_discord = 1 WHERE id = ?").run(participantId);
 }
