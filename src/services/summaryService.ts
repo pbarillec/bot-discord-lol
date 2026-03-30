@@ -37,6 +37,11 @@ export async function postPendingMatchSummariesForPlayer(
     return;
   }
 
+  if (!("send" in channel)) {
+    console.error("[summary] Match results channel does not support sending messages.");
+    return;
+  }
+
   const pendingSummaries = findUnpostedMatchSummariesByPlayer(player.id);
 
   for (const summary of pendingSummaries) {
