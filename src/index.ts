@@ -2,16 +2,9 @@ import { Client, GatewayIntentBits } from "discord.js";
 import { setupInteractionHandler } from "./bot/handlers/interactionHandler";
 import { registerCommands } from "./bot/registerCommands";
 import { env } from "./config/env";
-import { openDatabase } from "./db/database";
+import { initSchema } from "./db/schema";
 
-const db = openDatabase(env.databasePath);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS health_check (
-    id INTEGER PRIMARY KEY,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+initSchema();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
@@ -19,7 +12,7 @@ const client = new Client({
 
 setupInteractionHandler(client);
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   try {
     await registerCommands();
     console.log(`Logged in as ${client.user?.tag}`);
