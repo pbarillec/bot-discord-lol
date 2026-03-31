@@ -8,16 +8,23 @@ import {
 } from "../repositories/matchRepository";
 import { Player } from "../types/player";
 import { mapMatchForPlayer } from "../riot/riotMapper";
-import { getMatchById, getMatchIdsByPuuid } from "../riot/riotClient";
+import { RiotClientError, getMatchById, getMatchIdsByPuuid } from "../riot/riotClient";
 
 const RANKED_QUEUE_IDS = new Set([420, 440]);
+const RESYNC_MATCH_REQUEST_DELAY_MS = 120;
 
 export type PlayerResyncResult = {
   deletedParticipants: number;
   deletedOrphanMatches: number;
   importedRankedMatches: number;
+  skippedMatches: number;
   failedMatches: number;
+  rateLimitOccurred: boolean;
 };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export async function getNewMatchIdsForPlayer(player: Player): Promise<string[]> {
   const matchIds = await getMatchIdsByPuuid(player.puuid);
@@ -68,13 +75,22 @@ export async function resyncRankedHistoryForPlayer(
   const deletedOrphanMatches = deleteOrphanMatches();
   const matchIds = await getMatchIdsByPuuid(player.puuid, maxMatches);
   let importedRankedMatches = 0;
+  let skippedMatches = 0;
   let failedMatches = 0;
+  let rateLimitOccurred = false;
 
-  for (const matchId of matchIds) {
+  for (let index = 0; index < matchIds.length; index += 1) {
+    const matchId = matchIds[index];
+
+    if (index > 0) {
+      await sleep(RESYNC_MATCH_REQUEST_DELAY_MS);
+    }
+
     try {
       const match = await getMatchById(matchId);
 
       if (!RANKED_QUEUE_IDS.has(match.info.queueId)) {
+        skippedMatches += 1;
         continue;
       }
 
@@ -87,6 +103,7 @@ export async function resyncRankedHistoryForPlayer(
       });
 
       if (matchParticipantExists(savedMatch.id, player.id)) {
+        skippedMatches += 1;
         continue;
       }
 
@@ -107,6 +124,11 @@ export async function resyncRankedHistoryForPlayer(
       importedRankedMatches += 1;
     } catch (error) {
       failedMatches += 1;
+
+      if (error instanceof RiotClientError && error.status === 429) {
+        rateLimitOccurred = true;
+      }
+
       console.error(`[resync] Failed to import match ${matchId} for ${player.discord_username}:`, error);
     }
   }
@@ -115,6 +137,8 @@ export async function resyncRankedHistoryForPlayer(
     deletedParticipants,
     deletedOrphanMatches,
     importedRankedMatches,
+    skippedMatches,
     failedMatches,
+    rateLimitOccurred,
   };
 }
