@@ -18,6 +18,19 @@ export type PendingMatchSummary = {
   game_creation: number | null;
 };
 
+export type RecentMatchSummary = {
+  champion_name: string;
+  win: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  cs: number;
+  queue_id: number | null;
+  game_duration: number | null;
+  game_creation: number | null;
+  created_at: string;
+};
+
 export function matchExists(matchId: string): boolean {
   const row = db.prepare("SELECT 1 FROM matches WHERE match_id = ? LIMIT 1").get(matchId) as
     | { 1: number }
@@ -167,4 +180,29 @@ export function markOlderUnpostedMatchesAsPosted(playerId: number): void {
       )
     `,
   ).run(playerId);
+}
+
+export function findLatestMatchesByPlayer(playerId: number, limit: number): RecentMatchSummary[] {
+  return db
+    .prepare(
+      `
+        SELECT
+          mp.champion_name,
+          mp.win,
+          mp.kills,
+          mp.deaths,
+          mp.assists,
+          mp.cs,
+          COALESCE(mp.queue_id, m.queue_id) AS queue_id,
+          m.game_duration,
+          m.game_creation,
+          mp.created_at
+        FROM match_participants mp
+        INNER JOIN matches m ON m.id = mp.match_id
+        WHERE mp.player_id = ?
+        ORDER BY m.game_creation DESC, mp.id DESC
+        LIMIT ?
+      `,
+    )
+    .all(playerId, limit) as RecentMatchSummary[];
 }
