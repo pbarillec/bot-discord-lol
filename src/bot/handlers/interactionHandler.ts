@@ -5,6 +5,7 @@ import { handleMeCommand } from "../commands/me";
 import { handleNemesisCommand } from "../commands/nemesis";
 import { handleProfileCommand } from "../commands/profile";
 import { handleRegisterCommand } from "../commands/register";
+import { handleResyncCommand } from "../commands/resync";
 import { handleUnregisterCommand } from "../commands/unregister";
 
 export function setupInteractionHandler(client: Client): void {
@@ -22,6 +23,9 @@ export function setupInteractionHandler(client: Client): void {
         return;
       case "unregister":
         await handleUnregisterCommand(interaction);
+        return;
+      case "resync":
+        await handleResyncCommand(interaction);
         return;
       case "lastgames":
         await handleLastgamesCommand(interaction);
