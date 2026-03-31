@@ -18,6 +18,12 @@ export type RiotLeagueEntry = {
   losses: number;
 };
 
+type RiotActiveShard = {
+  puuid: string;
+  game: string;
+  activeShard: string;
+};
+
 export type RiotMatchResponse = {
   metadata: {
     matchId: string;
@@ -141,8 +147,17 @@ export async function getRankedEntriesByPuuid(
   puuid: string,
   playerRegion = "europe",
 ): Promise<RiotLeagueEntry[]> {
-  const platformRoute = toPlatformRoute(playerRegion);
   const pathPuuid = encodeURIComponent(puuid);
+  const activeShard = await riotGet<RiotActiveShard>(
+    `/riot/account/v1/active-shards/by-game/lol/by-puuid/${pathPuuid}`,
+  ).catch((error) => {
+    if (error instanceof RiotClientError && error.code === "NOT_FOUND") {
+      return null;
+    }
+
+    throw error;
+  });
+  const platformRoute = activeShard?.activeShard?.toLowerCase() ?? toPlatformRoute(playerRegion);
   const summoner = await riotGetOnPlatform<RiotSummoner>(
     platformRoute,
     `/lol/summoner/v4/summoners/by-puuid/${pathPuuid}`,
