@@ -1,5 +1,6 @@
 import { db } from "../db/database";
 import { findAllPlayers } from "../repositories/playerRepository";
+import { RiotLeagueEntry, getRankedEntriesByPuuid } from "../riot/riotClient";
 import { Player } from "../types/player";
 
 type PlayerMatchStatsRow = {
@@ -35,13 +36,26 @@ export type PlayerStats = {
   };
 };
 
-export type LeaderboardStat = "winrate" | "kda" | "games" | "kills" | "deaths" | "cs";
+export type LeaderboardStat =
+  | "rank_solo"
+  | "rank_flex"
+  | "winrate"
+  | "kda"
+  | "games"
+  | "kills"
+  | "deaths"
+  | "cs";
 
 export type LeaderboardEntry = {
   player: Player;
   stat: LeaderboardStat;
   value: number;
   games: number;
+  rank_tier?: string;
+  rank_division?: string;
+  rank_lp?: number;
+  rank_wins?: number;
+  rank_losses?: number;
 };
 
 function roundTo(value: number, decimals: number): number {
@@ -49,8 +63,8 @@ function roundTo(value: number, decimals: number): number {
   return Math.round(value * factor) / factor;
 }
 
-function getPlayerMatchRows(playerId: number): PlayerMatchStatsRow[] {
-  return db
+function getPlayerMatchRows(playerId: number, limit?: number): PlayerMatchStatsRow[] {
+  const rows = db
     .prepare(
       `
         SELECT
@@ -67,6 +81,90 @@ function getPlayerMatchRows(playerId: number): PlayerMatchStatsRow[] {
       `,
     )
     .all(playerId) as PlayerMatchStatsRow[];
+
+  if (!limit || limit <= 0) {
+    return rows;
+  }
+
+  return rows.slice(0, limit);
+}
+
+function isRankStat(stat: LeaderboardStat): boolean {
+  return stat === "rank_solo" || stat === "rank_flex";
+}
+
+function isMatchStat(stat: LeaderboardStat): boolean {
+  return !isRankStat(stat);
+}
+
+function getRankQueueType(stat: LeaderboardStat): string | null {
+  if (stat === "rank_solo") {
+    return "RANKED_SOLO_5x5";
+  }
+
+  if (stat === "rank_flex") {
+    return "RANKED_FLEX_SR";
+  }
+
+  return null;
+}
+
+function getTierValue(tier: string): number {
+  switch (tier.toUpperCase()) {
+    case "IRON":
+      return 1;
+    case "BRONZE":
+      return 2;
+    case "SILVER":
+      return 3;
+    case "GOLD":
+      return 4;
+    case "PLATINUM":
+      return 5;
+    case "EMERALD":
+      return 6;
+    case "DIAMOND":
+      return 7;
+    case "MASTER":
+      return 8;
+    case "GRANDMASTER":
+      return 9;
+    case "CHALLENGER":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+function getDivisionValue(division: string): number {
+  switch (division.toUpperCase()) {
+    case "IV":
+      return 1;
+    case "III":
+      return 2;
+    case "II":
+      return 3;
+    case "I":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+function getRankValue(entry: RiotLeagueEntry): number {
+  const tierValue = getTierValue(entry.tier);
+  const divisionValue = getDivisionValue(entry.rank);
+  return tierValue * 10_000 + divisionValue * 100 + Math.max(entry.leaguePoints, 0);
+}
+
+function findRankEntry(entries: RiotLeagueEntry[], stat: LeaderboardStat): RiotLeagueEntry | null {
+  const queueType = getRankQueueType(stat);
+
+  if (!queueType) {
+    return null;
+  }
+
+  return entries.find((entry) => entry.queueType === queueType) ?? null;
 }
 
 export function getPlayerStats(player: Player): PlayerStats | null {
@@ -187,12 +285,42 @@ export function getPlayerStats(player: Player): PlayerStats | null {
   };
 }
 
-export function getLeaderboard(stat: LeaderboardStat): LeaderboardEntry[] {
+export async function getLeaderboard(
+  stat: LeaderboardStat,
+  count = 20,
+): Promise<LeaderboardEntry[]> {
   const players = findAllPlayers();
   const entries: LeaderboardEntry[] = [];
+  const sampleCount = Math.max(1, Math.min(count, 20));
 
   for (const player of players) {
-    const rows = getPlayerMatchRows(player.id);
+    if (isRankStat(stat)) {
+      const rankedEntries = await getRankedEntriesByPuuid(player.puuid, player.region).catch((error) => {
+        console.error(`[leaderboard] Failed to fetch rank for ${player.riot_game_name}#${player.riot_tag_line}:`, error);
+        return [];
+      });
+      const rankEntry = findRankEntry(rankedEntries, stat);
+
+      if (!rankEntry) {
+        continue;
+      }
+
+      entries.push({
+        player,
+        stat,
+        value: getRankValue(rankEntry),
+        games: rankEntry.wins + rankEntry.losses,
+        rank_tier: rankEntry.tier,
+        rank_division: rankEntry.rank,
+        rank_lp: rankEntry.leaguePoints,
+        rank_wins: rankEntry.wins,
+        rank_losses: rankEntry.losses,
+      });
+
+      continue;
+    }
+
+    const rows = getPlayerMatchRows(player.id, sampleCount);
 
     if (rows.length === 0) {
       continue;
@@ -249,6 +377,11 @@ export function getLeaderboard(stat: LeaderboardStat): LeaderboardEntry[] {
   }
 
   entries.sort((a, b) => {
+    if (isRankStat(stat)) {
+      if (b.value !== a.value) {
+        return b.value - a.value;
+      }
+    } else
     if (stat === "deaths") {
       if (a.value !== b.value) {
         return a.value - b.value;
