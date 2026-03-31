@@ -1,5 +1,6 @@
 import { Client } from "discord.js";
 import { handleLeaderboardCommand } from "../commands/leaderboard";
+import { handleLastgamesCommand } from "../commands/lastgames";
 import { handleMeCommand } from "../commands/me";
 import { handleNemesisCommand } from "../commands/nemesis";
 import { handleProfileCommand } from "../commands/profile";
@@ -21,6 +22,9 @@ export function setupInteractionHandler(client: Client): void {
         return;
       case "unregister":
         await handleUnregisterCommand(interaction);
+        return;
+      case "lastgames":
+        await handleLastgamesCommand(interaction);
         return;
       case "profile":
         await handleProfileCommand(interaction);
