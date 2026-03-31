@@ -63,10 +63,13 @@ export async function handleLeaderboardCommand(interaction: ChatInputCommandInte
   const stat = statInput as LeaderboardStat;
   const count = Math.max(1, Math.min(countInput ?? 20, 20));
   await interaction.deferReply();
-  const leaderboard = await getLeaderboard(stat, count).catch((error) => {
+  let leaderboard: LeaderboardEntry[] | null = null;
+
+  try {
+    leaderboard = getLeaderboard(stat, count);
+  } catch (error) {
     console.error("[leaderboard] Failed to build leaderboard:", error);
-    return null;
-  });
+  }
 
   if (!leaderboard) {
     await interaction.editReply("Failed to build leaderboard right now. Please try again later.");
