@@ -96,6 +96,39 @@ function getPlatformCandidates(region: string): string[] {
   return [toPlatformRoute(region)];
 }
 
+function platformFromTagLine(tagLine?: string): string | null {
+  if (!tagLine) {
+    return null;
+  }
+
+  switch (tagLine.trim().toUpperCase()) {
+    case "EUW":
+      return "euw1";
+    case "EUNE":
+      return "eun1";
+    case "NA":
+      return "na1";
+    case "KR":
+      return "kr";
+    case "JP":
+      return "jp1";
+    case "BR":
+      return "br1";
+    case "LAN":
+      return "la1";
+    case "LAS":
+      return "la2";
+    case "TR":
+      return "tr1";
+    case "RU":
+      return "ru";
+    case "OCE":
+      return "oc1";
+    default:
+      return null;
+  }
+}
+
 function getRiotApiKey(): string {
   const apiKey = process.env.RIOT_API_KEY;
 
@@ -193,9 +226,14 @@ export async function getMatchById(matchId: string): Promise<RiotMatchResponse> 
 export async function getRankedEntriesByPuuid(
   puuid: string,
   playerRegion = "europe",
+  playerTagLine?: string,
 ): Promise<RiotLeagueEntry[]> {
   const pathPuuid = encodeURIComponent(puuid);
-  const platformCandidates = getPlatformCandidates(playerRegion);
+  const preferredPlatform = platformFromTagLine(playerTagLine);
+  const platformCandidates = [
+    ...(preferredPlatform ? [preferredPlatform] : []),
+    ...getPlatformCandidates(playerRegion).filter((platform) => platform !== preferredPlatform),
+  ];
   let lastError: RiotClientError | null = null;
 
   for (const platformRoute of platformCandidates) {
@@ -223,6 +261,7 @@ export async function getRankedEntriesByPuuid(
           console.error(
             `[riot] 403 on platform ${platformRoute} (${error.requestUrl ?? "unknown url"}) body: ${error.responseBody ?? "<empty>"}`,
           );
+          continue;
         }
       }
 
