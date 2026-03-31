@@ -30,9 +30,11 @@ export async function handleResyncCommand(interaction: ChatInputCommandInteracti
       [
         `Resync completed for ${player.riot_game_name}#${player.riot_tag_line}.`,
         `Imported ranked matches: ${result.importedRankedMatches}`,
+        `Skipped matches: ${result.skippedMatches}`,
         `Removed old participant rows: ${result.deletedParticipants}`,
         `Removed orphan matches: ${result.deletedOrphanMatches}`,
         `Failed match imports: ${result.failedMatches}`,
+        `Rate limit occurred: ${result.rateLimitOccurred ? "yes" : "no"}`,
       ].join("\n"),
     );
   } catch (error) {
