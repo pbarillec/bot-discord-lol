@@ -1,4 +1,5 @@
 import { db } from "../db/database";
+import { findAllPlayers } from "../repositories/playerRepository";
 import { Player } from "../types/player";
 
 type PlayerMatchStatsRow = {
@@ -34,13 +35,22 @@ export type PlayerStats = {
   };
 };
 
+export type LeaderboardStat = "winrate" | "kda" | "games" | "kills" | "deaths" | "cs";
+
+export type LeaderboardEntry = {
+  player: Player;
+  stat: LeaderboardStat;
+  value: number;
+  games: number;
+};
+
 function roundTo(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
 }
 
-export function getPlayerStats(player: Player): PlayerStats | null {
-  const rows = db
+function getPlayerMatchRows(playerId: number): PlayerMatchStatsRow[] {
+  return db
     .prepare(
       `
         SELECT
@@ -56,7 +66,11 @@ export function getPlayerStats(player: Player): PlayerStats | null {
         ORDER BY m.game_creation DESC, mp.id DESC
       `,
     )
-    .all(player.id) as PlayerMatchStatsRow[];
+    .all(playerId) as PlayerMatchStatsRow[];
+}
+
+export function getPlayerStats(player: Player): PlayerStats | null {
+  const rows = getPlayerMatchRows(player.id);
 
   if (rows.length === 0) {
     return null;
@@ -171,4 +185,84 @@ export function getPlayerStats(player: Player): PlayerStats | null {
       count: streakCount,
     },
   };
+}
+
+export function getLeaderboard(stat: LeaderboardStat): LeaderboardEntry[] {
+  const players = findAllPlayers();
+  const entries: LeaderboardEntry[] = [];
+
+  for (const player of players) {
+    const rows = getPlayerMatchRows(player.id);
+
+    if (rows.length === 0) {
+      continue;
+    }
+
+    const games = rows.length;
+    let wins = 0;
+    let kills = 0;
+    let deaths = 0;
+    let assists = 0;
+    let cs = 0;
+
+    for (const row of rows) {
+      wins += row.win === 1 ? 1 : 0;
+      kills += row.kills;
+      deaths += row.deaths;
+      assists += row.assists;
+      cs += row.cs;
+    }
+
+    const winrate = roundTo((wins / games) * 100, 1);
+    const kda = roundTo((kills + assists) / Math.max(deaths, 1), 2);
+
+    if ((stat === "winrate" || stat === "kda") && games < 3) {
+      continue;
+    }
+
+    let value = 0;
+
+    switch (stat) {
+      case "winrate":
+        value = winrate;
+        break;
+      case "kda":
+        value = kda;
+        break;
+      case "games":
+        value = games;
+        break;
+      case "kills":
+        value = kills;
+        break;
+      case "deaths":
+        value = deaths;
+        break;
+      case "cs":
+        value = cs;
+        break;
+      default:
+        value = 0;
+    }
+
+    entries.push({ player, stat, value, games });
+  }
+
+  entries.sort((a, b) => {
+    if (stat === "deaths") {
+      if (a.value !== b.value) {
+        return a.value - b.value;
+      }
+    } else if (b.value !== a.value) {
+      return b.value - a.value;
+    }
+
+    if (b.games !== a.games) {
+      return b.games - a.games;
+    }
+
+    return a.player.riot_game_name.localeCompare(b.player.riot_game_name);
+  });
+
+  return entries;
 }
