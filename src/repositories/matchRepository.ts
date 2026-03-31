@@ -42,7 +42,7 @@ export function matchExists(matchId: string): boolean {
 export function insertMatch(input: NewMatch): Match {
   db.prepare(
     `
-      INSERT INTO matches (
+      INSERT OR IGNORE INTO matches (
         match_id,
         queue_id,
         game_creation,
@@ -60,6 +60,21 @@ export function insertMatch(input: NewMatch): Match {
   }
 
   return row;
+}
+
+export function matchParticipantExists(matchDbId: number, playerId: number): boolean {
+  const row = db
+    .prepare(
+      `
+        SELECT 1
+        FROM match_participants
+        WHERE match_id = ? AND player_id = ?
+        LIMIT 1
+      `,
+    )
+    .get(matchDbId, playerId) as { 1: number } | undefined;
+
+  return Boolean(row);
 }
 
 export function insertMatchParticipant(input: NewMatchParticipant): MatchParticipant {
@@ -205,4 +220,20 @@ export function findLatestMatchesByPlayer(playerId: number, limit: number): Rece
       `,
     )
     .all(playerId, limit) as RecentMatchSummary[];
+}
+
+export function deleteMatchParticipantsByPlayer(playerId: number): number {
+  const result = db.prepare("DELETE FROM match_participants WHERE player_id = ?").run(playerId);
+  return result.changes;
+}
+
+export function deleteOrphanMatches(): number {
+  const result = db.prepare(
+    `
+      DELETE FROM matches
+      WHERE id NOT IN (SELECT DISTINCT match_id FROM match_participants)
+    `,
+  ).run();
+
+  return result.changes;
 }
