@@ -39,6 +39,8 @@ const commandDefinitions: RESTPostAPIApplicationGuildCommandsJSONBody[] = [
         type: 3,
         required: true,
         choices: [
+          { name: "rank_solo", value: "rank_solo" },
+          { name: "rank_flex", value: "rank_flex" },
           { name: "winrate", value: "winrate" },
           { name: "kda", value: "kda" },
           { name: "games", value: "games" },
@@ -46,6 +48,14 @@ const commandDefinitions: RESTPostAPIApplicationGuildCommandsJSONBody[] = [
           { name: "deaths", value: "deaths" },
           { name: "cs", value: "cs" },
         ],
+      },
+      {
+        name: "count",
+        description: "Number of recent matches used for match-based stats (default: 20)",
+        type: 4,
+        required: false,
+        min_value: 1,
+        max_value: 20,
       },
     ],
   },
