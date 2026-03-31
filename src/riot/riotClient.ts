@@ -268,9 +268,17 @@ export async function getAccountByRiotId(
   );
 }
 
-export async function getMatchIdsByPuuid(puuid: string): Promise<string[]> {
+export async function getMatchIdsByPuuid(
+  puuid: string,
+  count = 20,
+  start = 0,
+): Promise<string[]> {
   const pathPuuid = encodeURIComponent(puuid);
-  return riotGet<string[]>(`/lol/match/v5/matches/by-puuid/${pathPuuid}/ids`);
+  const safeCount = Math.max(1, Math.min(count, 100));
+  const safeStart = Math.max(0, start);
+  return riotGet<string[]>(
+    `/lol/match/v5/matches/by-puuid/${pathPuuid}/ids?start=${safeStart}&count=${safeCount}`,
+  );
 }
 
 export async function getMatchById(matchId: string): Promise<RiotMatchResponse> {
