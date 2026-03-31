@@ -44,11 +44,21 @@ type RiotClientErrorCode = "CONFIG_ERROR" | "NOT_FOUND" | "API_ERROR";
 
 export class RiotClientError extends Error {
   public readonly code: RiotClientErrorCode;
+  public readonly status?: number;
+  public readonly requestUrl?: string;
+  public readonly responseBody?: string;
 
-  constructor(code: RiotClientErrorCode, message: string) {
+  constructor(
+    code: RiotClientErrorCode,
+    message: string,
+    options?: { status?: number; requestUrl?: string; responseBody?: string },
+  ) {
     super(message);
     this.name = "RiotClientError";
     this.code = code;
+    this.status = options?.status;
+    this.requestUrl = options?.requestUrl;
+    this.responseBody = options?.responseBody;
   }
 }
 
@@ -96,20 +106,35 @@ function getRiotApiKey(): string {
   return apiKey;
 }
 
+function logRiotRequestFailure(requestUrl: string, status: number, responseBody: string): void {
+  const bodyPreview = responseBody.length > 300 ? `${responseBody.slice(0, 300)}...` : responseBody;
+  console.error(`[riot] request failed: ${requestUrl} -> ${status} | body: ${bodyPreview || "<empty>"}`);
+}
+
 async function riotGet<T>(path: string): Promise<T> {
   const apiKey = getRiotApiKey();
-  const response = await fetch(`${RIOT_API_BASE_URL}${path}`, {
+  const requestUrl = `${RIOT_API_BASE_URL}${path}`;
+  const response = await fetch(requestUrl, {
     headers: {
       "X-Riot-Token": apiKey,
     },
   });
 
   if (response.status === 404) {
-    throw new RiotClientError("NOT_FOUND", "Riot resource not found.");
+    throw new RiotClientError("NOT_FOUND", "Riot resource not found.", {
+      status: response.status,
+      requestUrl,
+    });
   }
 
   if (!response.ok) {
-    throw new RiotClientError("API_ERROR", `Riot API request failed with status ${response.status}.`);
+    const responseBody = await response.text();
+    logRiotRequestFailure(requestUrl, response.status, responseBody);
+    throw new RiotClientError(`API_ERROR`, `Riot API request failed with status ${response.status}.`, {
+      status: response.status,
+      requestUrl,
+      responseBody,
+    });
   }
 
   return (await response.json()) as T;
@@ -117,18 +142,28 @@ async function riotGet<T>(path: string): Promise<T> {
 
 async function riotGetOnPlatform<T>(platformRoute: string, path: string): Promise<T> {
   const apiKey = getRiotApiKey();
-  const response = await fetch(`https://${platformRoute}.api.riotgames.com${path}`, {
+  const requestUrl = `https://${platformRoute}.api.riotgames.com${path}`;
+  const response = await fetch(requestUrl, {
     headers: {
       "X-Riot-Token": apiKey,
     },
   });
 
   if (response.status === 404) {
-    throw new RiotClientError("NOT_FOUND", "Riot resource not found.");
+    throw new RiotClientError("NOT_FOUND", "Riot resource not found.", {
+      status: response.status,
+      requestUrl,
+    });
   }
 
   if (!response.ok) {
-    throw new RiotClientError("API_ERROR", `Riot API request failed with status ${response.status}.`);
+    const responseBody = await response.text();
+    logRiotRequestFailure(requestUrl, response.status, responseBody);
+    throw new RiotClientError(`API_ERROR`, `Riot API request failed with status ${response.status}.`, {
+      status: response.status,
+      requestUrl,
+      responseBody,
+    });
   }
 
   return (await response.json()) as T;
@@ -164,6 +199,7 @@ export async function getRankedEntriesByPuuid(
   let lastError: RiotClientError | null = null;
 
   for (const platformRoute of platformCandidates) {
+    console.log(`[riot] trying ranked lookup on platform ${platformRoute} for puuid ${pathPuuid}`);
     try {
       const summoner = await riotGetOnPlatform<RiotSummoner>(
         platformRoute,
@@ -175,9 +211,19 @@ export async function getRankedEntriesByPuuid(
         `/lol/league/v4/entries/by-summoner/${pathSummonerId}`,
       );
     } catch (error) {
-      if (error instanceof RiotClientError && error.code === "NOT_FOUND") {
+      if (error instanceof RiotClientError) {
         lastError = error;
-        continue;
+
+        if (error.code === "NOT_FOUND") {
+          console.log(`[riot] platform ${platformRoute} not found for puuid ${pathPuuid}, trying next.`);
+          continue;
+        }
+
+        if (error.status === 403) {
+          console.error(
+            `[riot] 403 on platform ${platformRoute} (${error.requestUrl ?? "unknown url"}) body: ${error.responseBody ?? "<empty>"}`,
+          );
+        }
       }
 
       throw error;
