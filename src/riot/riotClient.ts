@@ -6,7 +6,8 @@ export type RiotAccount = {
 
 export type RiotSummoner = {
   id?: string;
-  puuid: string;
+  puuid?: string;
+  accountId?: string;
 };
 
 export type RiotLeagueEntry = {
@@ -202,6 +203,59 @@ async function riotGetOnPlatform<T>(platformRoute: string, path: string): Promis
   return (await response.json()) as T;
 }
 
+async function getSummonerByPuuidOnPlatform(
+  platformRoute: string,
+  encodedPuuid: string,
+): Promise<RiotSummoner> {
+  const apiKey = getRiotApiKey();
+  const path = `/lol/summoner/v4/summoners/by-puuid/${encodedPuuid}`;
+  const requestUrl = `https://${platformRoute}.api.riotgames.com${path}`;
+  const response = await fetch(requestUrl, {
+    headers: {
+      "X-Riot-Token": apiKey,
+    },
+  });
+  const responseBody = await response.text();
+
+  if (response.status === 404) {
+    throw new RiotClientError("NOT_FOUND", "Riot resource not found.", {
+      status: response.status,
+      requestUrl,
+      responseBody,
+    });
+  }
+
+  if (!response.ok) {
+    logRiotRequestFailure(requestUrl, response.status, responseBody);
+    throw new RiotClientError("API_ERROR", `Riot API request failed with status ${response.status}.`, {
+      status: response.status,
+      requestUrl,
+      responseBody,
+    });
+  }
+
+  let parsedBody: unknown = {};
+
+  try {
+    parsedBody = responseBody ? (JSON.parse(responseBody) as unknown) : {};
+  } catch {
+    parsedBody = {};
+  }
+
+  const summoner = parsedBody as RiotSummoner;
+
+  if (platformRoute === "euw1") {
+    console.log(`[riot] successful summoner lookup url: ${requestUrl}`);
+    console.log(`[riot] successful summoner raw body: ${responseBody || "<empty>"}`);
+    console.log(`[riot] successful summoner keys: ${Object.keys(summoner as object).join(", ")}`);
+    console.log(
+      `[riot] successful summoner fields: id=${summoner.id ?? "<missing>"} puuid=${summoner.puuid ?? "<missing>"} accountId=${summoner.accountId ?? "<missing>"}`,
+    );
+  }
+
+  return summoner;
+}
+
 export async function getAccountByRiotId(
   gameName: string,
   tagLine: string,
@@ -239,10 +293,7 @@ export async function getRankedEntriesByPuuid(
   for (const platformRoute of platformCandidates) {
     console.log(`[riot] trying ranked lookup on platform ${platformRoute} for puuid ${pathPuuid}`);
     try {
-      const summoner = await riotGetOnPlatform<RiotSummoner>(
-        platformRoute,
-        `/lol/summoner/v4/summoners/by-puuid/${pathPuuid}`,
-      );
+      const summoner = await getSummonerByPuuidOnPlatform(platformRoute, pathPuuid);
       if (!summoner.id) {
         console.error(
           `[riot] missing summoner.id from ${platformRoute} for puuid ${pathPuuid}. Response puuid: ${summoner.puuid ?? "<unknown>"}`,
