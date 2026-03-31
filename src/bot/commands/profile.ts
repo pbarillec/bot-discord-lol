@@ -48,6 +48,5 @@ export async function handleProfileCommand(interaction: ChatInputCommandInteract
       "",
       `Current streak: ${streakLabel}`,
     ].join("\n"),
-    ephemeral: true,
   });
 }
