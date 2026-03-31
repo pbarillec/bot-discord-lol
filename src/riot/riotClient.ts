@@ -18,12 +18,6 @@ export type RiotLeagueEntry = {
   losses: number;
 };
 
-type RiotActiveShard = {
-  puuid: string;
-  game: string;
-  activeShard: string;
-};
-
 export type RiotMatchResponse = {
   metadata: {
     matchId: string;
@@ -72,6 +66,24 @@ function toPlatformRoute(region: string): string {
     default:
       return RIOT_DEFAULT_PLATFORM;
   }
+}
+
+function getPlatformCandidates(region: string): string[] {
+  const normalizedRegion = region.toLowerCase();
+
+  if (normalizedRegion === "europe") {
+    return ["euw1", "eun1", "tr1", "ru"];
+  }
+
+  if (normalizedRegion === "americas") {
+    return ["na1", "br1", "la1", "la2"];
+  }
+
+  if (normalizedRegion === "asia") {
+    return ["kr", "jp1"];
+  }
+
+  return [toPlatformRoute(region)];
 }
 
 function getRiotApiKey(): string {
@@ -148,23 +160,33 @@ export async function getRankedEntriesByPuuid(
   playerRegion = "europe",
 ): Promise<RiotLeagueEntry[]> {
   const pathPuuid = encodeURIComponent(puuid);
-  const activeShard = await riotGet<RiotActiveShard>(
-    `/riot/account/v1/active-shards/by-game/lol/by-puuid/${pathPuuid}`,
-  ).catch((error) => {
-    if (error instanceof RiotClientError && error.code === "NOT_FOUND") {
-      return null;
-    }
+  const platformCandidates = getPlatformCandidates(playerRegion);
+  let lastError: RiotClientError | null = null;
 
-    throw error;
-  });
-  const platformRoute = activeShard?.activeShard?.toLowerCase() ?? toPlatformRoute(playerRegion);
-  const summoner = await riotGetOnPlatform<RiotSummoner>(
-    platformRoute,
-    `/lol/summoner/v4/summoners/by-puuid/${pathPuuid}`,
-  );
-  const pathSummonerId = encodeURIComponent(summoner.id);
-  return riotGetOnPlatform<RiotLeagueEntry[]>(
-    platformRoute,
-    `/lol/league/v4/entries/by-summoner/${pathSummonerId}`,
-  );
+  for (const platformRoute of platformCandidates) {
+    try {
+      const summoner = await riotGetOnPlatform<RiotSummoner>(
+        platformRoute,
+        `/lol/summoner/v4/summoners/by-puuid/${pathPuuid}`,
+      );
+      const pathSummonerId = encodeURIComponent(summoner.id);
+      return await riotGetOnPlatform<RiotLeagueEntry[]>(
+        platformRoute,
+        `/lol/league/v4/entries/by-summoner/${pathSummonerId}`,
+      );
+    } catch (error) {
+      if (error instanceof RiotClientError && error.code === "NOT_FOUND") {
+        lastError = error;
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new RiotClientError("NOT_FOUND", "Riot summoner not found on known platform routes.");
 }
