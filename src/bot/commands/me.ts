@@ -23,6 +23,5 @@ export async function handleMeCommand(interaction: ChatInputCommandInteraction):
       `Region: ${player.region}`,
       `Registered: ${registeredAtLabel}`,
     ].join("\n"),
-    ephemeral: true,
   });
 }
