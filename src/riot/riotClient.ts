@@ -5,7 +5,7 @@ export type RiotAccount = {
 };
 
 export type RiotSummoner = {
-  id: string;
+  id?: string;
   puuid: string;
 };
 
@@ -243,7 +243,15 @@ export async function getRankedEntriesByPuuid(
         platformRoute,
         `/lol/summoner/v4/summoners/by-puuid/${pathPuuid}`,
       );
-      const pathSummonerId = encodeURIComponent(summoner.id);
+      if (!summoner.id) {
+        console.error(
+          `[riot] missing summoner.id from ${platformRoute} for puuid ${pathPuuid}. Response puuid: ${summoner.puuid ?? "<unknown>"}`,
+        );
+        continue;
+      }
+
+      const summonerId = summoner.id;
+      const pathSummonerId = encodeURIComponent(summonerId);
       return await riotGetOnPlatform<RiotLeagueEntry[]>(
         platformRoute,
         `/lol/league/v4/entries/by-summoner/${pathSummonerId}`,
