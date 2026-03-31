@@ -295,7 +295,7 @@ export async function getLeaderboard(
 
   for (const player of players) {
     if (isRankStat(stat)) {
-      const rankedEntries = await getRankedEntriesByPuuid(player.puuid, player.region).catch((error) => {
+      const rankedEntries = await getRankedEntriesByPuuid(player.puuid, player.region, player.riot_tag_line).catch((error) => {
         console.error(`[leaderboard] Failed to fetch rank for ${player.riot_game_name}#${player.riot_tag_line}:`, error);
         return [];
       });
