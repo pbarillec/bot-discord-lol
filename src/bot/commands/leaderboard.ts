@@ -52,6 +52,5 @@ export async function handleLeaderboardCommand(interaction: ChatInputCommandInte
 
   await interaction.reply({
     content: [`Leaderboard: ${stat}`, "", ...lines].join("\n"),
-    ephemeral: true,
   });
 }
