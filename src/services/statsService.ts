@@ -1,5 +1,6 @@
 import { db } from "../db/database";
 import { findAllPlayers } from "../repositories/playerRepository";
+import { getMatchById } from "../riot/riotClient";
 import { Player } from "../types/player";
 
 type PlayerMatchStatsRow = {
@@ -44,6 +45,19 @@ export type LeaderboardEntry = {
   games: number;
 };
 
+export type NemesisEntry = {
+  championName: string;
+  games: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+};
+
+type PlayerStoredMatchRow = {
+  match_id: string;
+  win: number;
+};
+
 function roundTo(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
@@ -73,6 +87,22 @@ function getPlayerMatchRows(playerId: number, limit?: number): PlayerMatchStatsR
   }
 
   return rows.slice(0, limit);
+}
+
+function getPlayerStoredMatchRows(playerId: number): PlayerStoredMatchRow[] {
+  return db
+    .prepare(
+      `
+        SELECT
+          m.match_id,
+          mp.win
+        FROM match_participants mp
+        INNER JOIN matches m ON m.id = mp.match_id
+        WHERE mp.player_id = ?
+        ORDER BY m.game_creation DESC, mp.id DESC
+      `,
+    )
+    .all(playerId) as PlayerStoredMatchRow[];
 }
 
 export function getPlayerStats(player: Player): PlayerStats | null {
@@ -275,4 +305,76 @@ export function getLeaderboard(
   });
 
   return entries;
+}
+
+export async function getPlayerNemesis(player: Player): Promise<NemesisEntry[]> {
+  const storedMatches = getPlayerStoredMatchRows(player.id);
+
+  if (storedMatches.length === 0) {
+    return [];
+  }
+
+  const byEnemyChampion = new Map<string, { games: number; wins: number }>();
+
+  for (const storedMatch of storedMatches) {
+    try {
+      const match = await getMatchById(storedMatch.match_id);
+      const playerParticipant = match.info.participants.find((participant) => participant.puuid === player.puuid);
+
+      if (!playerParticipant || typeof playerParticipant.teamId !== "number") {
+        continue;
+      }
+
+      const enemyParticipants = match.info.participants.filter(
+        (participant) => participant.teamId !== playerParticipant.teamId,
+      );
+
+      if (enemyParticipants.length === 0) {
+        continue;
+      }
+
+      const isWin = storedMatch.win === 1;
+
+      for (const enemy of enemyParticipants) {
+        if (!enemy.championName) {
+          continue;
+        }
+
+        const current = byEnemyChampion.get(enemy.championName) ?? { games: 0, wins: 0 };
+        current.games += 1;
+        current.wins += isWin ? 1 : 0;
+        byEnemyChampion.set(enemy.championName, current);
+      }
+    } catch (error) {
+      console.error(`[nemesis] Failed to load match ${storedMatch.match_id} for ${player.riot_game_name}:`, error);
+    }
+  }
+
+  const entries = Array.from(byEnemyChampion.entries())
+    .map(([championName, values]) => {
+      const losses = values.games - values.wins;
+      const winrate = roundTo((values.wins / values.games) * 100, 1);
+
+      return {
+        championName,
+        games: values.games,
+        wins: values.wins,
+        losses,
+        winrate,
+      };
+    })
+    .filter((entry) => entry.games >= 2)
+    .sort((a, b) => {
+      if (a.winrate !== b.winrate) {
+        return a.winrate - b.winrate;
+      }
+
+      if (b.games !== a.games) {
+        return b.games - a.games;
+      }
+
+      return a.championName.localeCompare(b.championName);
+    });
+
+  return entries.slice(0, 3);
 }
