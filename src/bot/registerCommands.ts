@@ -16,6 +16,7 @@ const commandDefinitions: RESTPostAPIApplicationGuildCommandsJSONBody[] = [
   },
   { name: "me", description: "Show your linked profile" },
   { name: "unregister", description: "Unregister your summoner" },
+  { name: "resync", description: "Rebuild your ranked match history" },
   {
     name: "lastgames",
     description: "Show your latest matches",
