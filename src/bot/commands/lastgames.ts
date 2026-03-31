@@ -72,6 +72,5 @@ export async function handleLastgamesCommand(
 
   await interaction.reply({
     content: [`Latest ${matches.length} game(s) for ${player.riot_game_name}#${player.riot_tag_line}:`, ...lines].join("\n"),
-    ephemeral: true,
   });
 }
