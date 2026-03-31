@@ -146,14 +146,69 @@ function logRiotRequestFailure(requestUrl: string, status: number, responseBody:
   console.error(`[riot] request failed: ${requestUrl} -> ${status} | body: ${bodyPreview || "<empty>"}`);
 }
 
-async function riotGet<T>(path: string): Promise<T> {
-  const apiKey = getRiotApiKey();
-  const requestUrl = `${RIOT_API_BASE_URL}${path}`;
-  const response = await fetch(requestUrl, {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(retryAfterHeader: string | null): number {
+  if (!retryAfterHeader) {
+    return 1000;
+  }
+
+  const asSeconds = Number.parseFloat(retryAfterHeader);
+
+  if (!Number.isNaN(asSeconds) && asSeconds >= 0) {
+    return Math.ceil(asSeconds * 1000);
+  }
+
+  const asDate = Date.parse(retryAfterHeader);
+
+  if (!Number.isNaN(asDate)) {
+    const delay = asDate - Date.now();
+    return delay > 0 ? delay : 1000;
+  }
+
+  return 1000;
+}
+
+async function fetchWithSingle429Retry(requestUrl: string, apiKey: string): Promise<Response> {
+  let response = await fetch(requestUrl, {
     headers: {
       "X-Riot-Token": apiKey,
     },
   });
+
+  if (response.status !== 429) {
+    return response;
+  }
+
+  const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+  console.warn(`[riot] 429 received for ${requestUrl}. Retrying after ${retryAfterMs}ms.`);
+  await sleep(retryAfterMs);
+
+  response = await fetch(requestUrl, {
+    headers: {
+      "X-Riot-Token": apiKey,
+    },
+  });
+
+  if (response.status === 429) {
+    const retryBody = await response.text();
+    logRiotRequestFailure(requestUrl, response.status, retryBody);
+    throw new RiotClientError("API_ERROR", "Riot rate limit persisted after one retry.", {
+      status: response.status,
+      requestUrl,
+      responseBody: retryBody,
+    });
+  }
+
+  return response;
+}
+
+async function riotGet<T>(path: string): Promise<T> {
+  const apiKey = getRiotApiKey();
+  const requestUrl = `${RIOT_API_BASE_URL}${path}`;
+  const response = await fetchWithSingle429Retry(requestUrl, apiKey);
 
   if (response.status === 404) {
     throw new RiotClientError("NOT_FOUND", "Riot resource not found.", {
@@ -178,11 +233,7 @@ async function riotGet<T>(path: string): Promise<T> {
 async function riotGetOnPlatform<T>(platformRoute: string, path: string): Promise<T> {
   const apiKey = getRiotApiKey();
   const requestUrl = `https://${platformRoute}.api.riotgames.com${path}`;
-  const response = await fetch(requestUrl, {
-    headers: {
-      "X-Riot-Token": apiKey,
-    },
-  });
+  const response = await fetchWithSingle429Retry(requestUrl, apiKey);
 
   if (response.status === 404) {
     throw new RiotClientError("NOT_FOUND", "Riot resource not found.", {
@@ -211,11 +262,7 @@ async function getSummonerByPuuidOnPlatform(
   const apiKey = getRiotApiKey();
   const path = `/lol/summoner/v4/summoners/by-puuid/${encodedPuuid}`;
   const requestUrl = `https://${platformRoute}.api.riotgames.com${path}`;
-  const response = await fetch(requestUrl, {
-    headers: {
-      "X-Riot-Token": apiKey,
-    },
-  });
+  const response = await fetchWithSingle429Retry(requestUrl, apiKey);
   const responseBody = await response.text();
 
   if (response.status === 404) {
