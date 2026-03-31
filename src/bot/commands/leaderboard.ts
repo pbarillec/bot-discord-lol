@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction } from "discord.js";
+import { ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { findAllPlayers } from "../../repositories/playerRepository";
 import { LeaderboardEntry, LeaderboardStat, getLeaderboard } from "../../services/statsService";
 
@@ -51,7 +51,7 @@ export async function handleLeaderboardCommand(interaction: ChatInputCommandInte
   if (!VALID_LEADERBOARD_STATS.includes(statInput as LeaderboardStat)) {
     await interaction.reply({
       content: "Invalid stat. Use one of: rank_solo, rank_flex, winrate, kda, games, kills, deaths, cs.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -59,23 +59,32 @@ export async function handleLeaderboardCommand(interaction: ChatInputCommandInte
   const players = findAllPlayers();
 
   if (players.length === 0) {
-    await interaction.reply({ content: "No registered players yet.", ephemeral: true });
+    await interaction.reply({ content: "No registered players yet.", flags: MessageFlags.Ephemeral });
     return;
   }
 
   const stat = statInput as LeaderboardStat;
   const count = Math.max(1, Math.min(countInput ?? 20, 20));
-  const leaderboard = await getLeaderboard(stat, count);
+  await interaction.deferReply();
+  const leaderboard = await getLeaderboard(stat, count).catch((error) => {
+    console.error("[leaderboard] Failed to build leaderboard:", error);
+    return null;
+  });
+
+  if (!leaderboard) {
+    await interaction.editReply("Failed to build leaderboard right now. Please try again later.");
+    return;
+  }
 
   if (leaderboard.length === 0) {
-    await interaction.reply({ content: `No players qualify for leaderboard: ${stat}.`, ephemeral: true });
+    await interaction.editReply(`No players qualify for leaderboard: ${stat}.`);
     return;
   }
 
   const lines = leaderboard.map((entry, index) => formatEntry(entry, index + 1));
   const subtitle = stat === "rank_solo" || stat === "rank_flex" ? "" : `Sample size: latest ${count} match(es)`;
 
-  await interaction.reply({
+  await interaction.editReply({
     content: [`Leaderboard: ${stat}`, subtitle, ...lines].filter((line) => line.length > 0).join("\n"),
   });
 }
