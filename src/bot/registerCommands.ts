@@ -29,7 +29,26 @@ const commandDefinitions: RESTPostAPIApplicationGuildCommandsJSONBody[] = [
     ],
   },
   { name: "profile", description: "Show a player profile" },
-  { name: "leaderboard", description: "Show leaderboard" },
+  {
+    name: "leaderboard",
+    description: "Show leaderboard",
+    options: [
+      {
+        name: "stat",
+        description: "Statistic used to rank players",
+        type: 3,
+        required: true,
+        choices: [
+          { name: "winrate", value: "winrate" },
+          { name: "kda", value: "kda" },
+          { name: "games", value: "games" },
+          { name: "kills", value: "kills" },
+          { name: "deaths", value: "deaths" },
+          { name: "cs", value: "cs" },
+        ],
+      },
+    ],
+  },
   { name: "nemesis", description: "Show your nemesis" },
 ];
 
