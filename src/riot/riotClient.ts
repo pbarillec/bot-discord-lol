@@ -28,6 +28,7 @@ export type RiotMatchResponse = {
     gameDuration: number;
     gameCreation: number;
     participants: Array<{
+      teamId: number;
       puuid: string;
       championName: string;
       win: boolean;
